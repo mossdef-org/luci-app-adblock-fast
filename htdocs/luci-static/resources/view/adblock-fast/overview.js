@@ -1146,7 +1146,7 @@ return view.extend({
 	},
 
 	handleSaveApply: function (ev, mode) {
-		var self = this, map = this._map;
+		var self = this, map = this._map, hasUciChanges = false;
 		// Capture the schedule from the live form BEFORE handleSave(), which
 		// re-renders the map and resets the virtual auto_update_* widgets back to
 		// their cfgvalue (the crontab state parsed at page load). Reading them
@@ -1155,19 +1155,35 @@ return view.extend({
 		var schedule = self.collectSchedule(map);
 		return this.handleSave(ev)
 			.then(function () {
-				return ui.changes.apply(mode == "0");
+				return L.uci.changes();
 			})
-			.then(function () {
+			.then(function (changes) {
+				hasUciChanges = Object.keys(changes).some(function (config) {
+					return Array.isArray(changes[config]) && changes[config].length > 0;
+				});
+				// The schedule fields are virtual and never create UCI changes. Avoid
+				// calling LuCI's apply endpoint for a schedule-only save, otherwise it
+				// displays the misleading "There are no changes to apply" notice.
+				if (hasUciChanges)
+					ui.changes.apply(mode == "0");
+
 				return L.resolveDefault(
 					adb.syncCron(pkg.Name, null, schedule),
 					false,
-				).then(function (result) {
-					if (result === false)
-						ui.addNotification(
-							null,
-							E("p", {}, _("Failed to update cron schedule.")),
-						);
-				});
+				);
+			})
+			.then(function (result) {
+				if (result === false) {
+					ui.addNotification(
+						null,
+						E("p", {}, _("Failed to update cron schedule.")),
+					);
+				}
+				else if (!hasUciChanges) {
+					// Re-read the crontab source of truth so the virtual fields show the
+					// newly saved schedule without requiring a manual browser refresh.
+					window.location.reload();
+				}
 			});
 	},
 });
