@@ -215,7 +215,11 @@ var _syncCron = rpc.declare({
 function syncCron(name, action, schedule) {
 	var s = schedule || {};
 	return _syncCron(
-		name, action,
+		// rpc.declare() maps positional values to named JSON members. Passing
+		// null here sends `"action": null`, which rpcd rejects because action is
+		// declared as a string. Use undefined so JSON serialization omits the
+		// optional member for schedule-only updates.
+		name, action ?? undefined,
 		s.auto_update_enabled, s.auto_update_mode, s.auto_update_minute,
 		s.auto_update_hour, s.auto_update_weekday, s.auto_update_monthday,
 		s.auto_update_every_ndays, s.auto_update_every_nhours,
